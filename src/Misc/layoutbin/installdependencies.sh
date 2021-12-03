@@ -12,9 +12,16 @@ fi
 # Fedora based OS (Fedora, Redhat, Centos, Oracle Linux 7) has /etc/redhat-release
 # SUSE based OS (OpenSUSE, SUSE Enterprise) has ID_LIKE=suse in /etc/os-release
 
+function print_repositories_and_deps_warning()
+{
+    echo "Please make sure that required repositories are connected for relevant package installer."
+    echo "For issues with dependencies installation (like 'dependency was not found in repository' or 'problem retrieving the repository index file') - you can reach out to distribution owner for futher support."
+}
+
 function print_errormessage() 
 {
     echo "Can't install dotnet core dependencies."
+    print_repositories_and_deps_warning
     echo "You can manually install all required dependencies based on following documentation"
     echo "https://docs.microsoft.com/en-us/dotnet/core/dependencies?pivots=os-linux&tabs=netcore31"
 }
@@ -22,7 +29,8 @@ function print_errormessage()
 function print_rhel6message() 
 {
     echo "We did our best effort to install dotnet core dependencies"
-    echo "However, there are some dependencies which require manual installation" 
+    echo "However, there are some dependencies which require manual installation"
+    print_repositories_and_deps_warning
     echo "You can install all remaining required dependencies based on the following documentation"
     echo "https://github.com/dotnet/core/blob/master/Documentation/build-and-install-rhel6-prerequisites.md"
 }
@@ -30,6 +38,7 @@ function print_rhel6message()
 function print_rhel6errormessage() 
 {
     echo "We couldn't install dotnet core dependencies"
+    print_repositories_and_deps_warning
     echo "You can manually install all required dependencies based on following documentation"
     echo "https://docs.microsoft.com/en-us/dotnet/core/dependencies?pivots=os-linux&tabs=netcore31"
     echo "In addition, there are some dependencies which require manual installation. Please follow this documentation" 
@@ -209,16 +218,31 @@ then
             fi
         fi
     else
+
         # we might on OpenSUSE
-        OSTYPE=$(grep ID_LIKE /etc/os-release | cut -f2 -d=)
+        OSTYPE=$(grep ^ID_LIKE /etc/os-release | cut -f2 -d=)
+        if [ -z $OSTYPE ]
+        then
+            OSTYPE=$(grep ^ID /etc/os-release | cut -f2 -d=)
+        fi
         echo $OSTYPE
-        if [ $OSTYPE == '"suse"' ]
+
+        # is_sles=1 if it is a SLES OS
+        [ -n $OSTYPE ] && ([ $OSTYPE == '"sles"' ] || [ $OSTYPE == '"sles_sap"' ]) && is_sles=1
+
+        if  [[ -n $OSTYPE && ( $OSTYPE == '"suse"'  || $is_sles == 1) ]]
         then
             echo "The current OS is SUSE based"
             command -v zypper
             if [ $? -eq 0 ]
             then
-                zypper -n install lttng-ust libopenssl1_0_0 krb5 zlib libicu52_1
+                if [[ -n $is_sles ]]
+                then
+                    zypper -n install lttng-ust libopenssl1_1 krb5 zlib libicu
+                else
+                    zypper -n install lttng-ust libopenssl1_0_0 krb5 zlib libicu
+                fi
+
                 if [ $? -ne 0 ]
                 then
                     echo "'zypper' failed with exit code '$?'"
